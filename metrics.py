@@ -1,5 +1,3 @@
-import numpy as np
-import warnings
 from sklearn.metrics import average_precision_score
 from sklearn.metrics import roc_auc_score
 

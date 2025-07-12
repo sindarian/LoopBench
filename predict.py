@@ -1,13 +1,8 @@
-import pandas as pd
-import numpy as np
-import os
 from hickit.reader import get_headers, get_chrom_sizes
-import tensorflow as tf
 import json
-import tensorflow_addons as tfa
-from utils import *
+from util.utils import *
 import gc
-from sklearn.metrics import f1_score, average_precision_score
+from sklearn.metrics import average_precision_score
 
 
 def run_output_predictions(run_id, model_stage, threshold, target_dataset_name, target_assembly, chroms, output_path, mode):
@@ -26,7 +21,7 @@ def run_output_predictions(run_id, model_stage, threshold, target_dataset_name, 
     :return: Pandas dataframe contains the genome-wide annotations
     """
     dataset_dir = os.path.join('dataset', target_dataset_name)
-    model_path = os.path.join('models', run_id + '_' + model_stage)
+    model_path = os.path.join('outputs/models', run_id + '_' + model_stage)
     chrom_size_path = '{}.chrom.sizes'.format(target_assembly)
     extra_config_path = os.path.join('configs', '{}_extra_settings.json'.format(run_id))
     with open(extra_config_path) as fp:

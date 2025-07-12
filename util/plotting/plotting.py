@@ -2,12 +2,14 @@ import json
 import matplotlib.pyplot as plt
 import os
 import logging
-from logger import Logger
+import math
+
+from matplotlib.offsetbox import AnchoredText
+from util.constants import PLOT_DIR, METRICS_DIR, FLATTENED_PATCH_SIZE
+from util.logger import Logger
 import numpy as np
 
 LOGGER = Logger(name='plotting', level=logging.DEBUG).get_logger()
-
-PLOT_DIR = 'plots/'
 
 def load_histories(metric_dir):
     histories = []
@@ -22,16 +24,13 @@ def load_histories(metric_dir):
         model_names.append(file.split('_')[0])
     return histories, model_names
 
-def plot_training_history(metric_dir):
+def plot_training_history(metric_dir=METRICS_DIR):
     histories, labels = load_histories(metric_dir)
-    # labels = ['efn', 'res']
     colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red']
 
     # Extract metric pairs
     all_metrics = list(histories[0].keys())
     paired_metrics = [(m, f"val_{m}") for m in all_metrics if not m.startswith('val')]
-
-    import math
 
     n_plots = len(paired_metrics)
     rows = math.ceil(n_plots / 2)
@@ -68,22 +67,25 @@ def plot_training_history(metric_dir):
     plt.savefig(PLOT_DIR + 'training_evaluation.png')
     plt.show()
 
-def plot_pixel_counts(data, title, limit=10, plot_neg=False):
-    print(len(data))
-    positives = [t[0] for t in data[:limit]]
-    indices = np.arange(len(positives))
-    print(len(positives))
-    print(len(indices))
+def plot_pixel_counts(data, title, limit = None, plot_neg=False):
+    data_size = len(data if not limit else data[:limit])
+    indices = np.arange(data_size)
+    positives = [t[0] for t in data[:data_size]]
+    # indices = np.arange(len(positives))
 
     plt.figure(figsize=(12, 6))
     plt.bar(indices, positives, color='green', label='Positives')
     if plot_neg:
-        negatives = [t[1] for t in data[:limit]]
+        negatives = [t[1] for t in data[:data_size]]
         plt.bar(indices, negatives, bottom=positives, color='red', alpha=0.5, label='Negatives')
 
+    text = AnchoredText(f'Max pixel count: {FLATTENED_PATCH_SIZE} pixels', loc='upper center', frameon=True)
     plt.xlabel('Image')
-    plt.ylabel('Pixel Counts')
-    plt.title(f'Pixel Counts per Image (Positives and Negatives) for {title}')
+    plt.ylabel('Pixel Amount')
+    plt.title(f'Pixel Labels per Image for {title}')
+    plt.gca().add_artist(text)
     plt.legend()
     plt.tight_layout()
+    plt.grid(True)
     plt.show()
+    plt.savefig(PLOT_DIR + 'pixel_counts.png')

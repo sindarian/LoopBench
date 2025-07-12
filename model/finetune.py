@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
-import random
 import os
-import sys
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers import Input, Dropout, Activation, Reshape, Dense
 from tensorflow.keras.models import Model
 
 import tensorflow_addons as tfa
-import json
 
-from custom_layers import CombineConcat, Edge2Node, BilinearFusion
-from utils import PATCH_SIZE, scale_hic, normalise_graphs, get_split_dataset
+from model.custom_layers import CombineConcat, BilinearFusion
+from util.utils import PATCH_SIZE, scale_hic, normalise_graphs, get_split_dataset
 from metrics import compute_auc
 
 
@@ -30,7 +27,7 @@ def ds_generator(images, features, graphs, flatten_y):
 
 
 def finetune_run(chroms, run_id, seed, dataset_name, epoch=50):
-    dataset_dir = os.path.join('dataset', dataset_name)
+    dataset_dir = os.path.join('../dataset', dataset_name)
     print('#' * 10 + ' Fine-tuning ' + '#' * 10)
     # seed = hash(run_id)
     train_images, train_graphs, train_features, train_y, val_images, val_graphs, val_features, val_y, test_images, \
@@ -184,4 +181,4 @@ def finetune_run(chroms, run_id, seed, dataset_name, epoch=50):
     print('Validation AUC is {}. Validation AP is {}.'.format(val_auc, val_ap))
     print('Test AUC is {}. Test AP is {}.'.format(test_auc, test_ap))
 
-    model.save(os.path.join('models', '{}_Finetune'.format(run_id)))
+    model.save(os.path.join('../outputs/models', '{}_Finetune'.format(run_id)))

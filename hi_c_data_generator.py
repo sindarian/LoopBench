@@ -3,10 +3,11 @@ import os
 import tensorflow as tf
 
 class HiCDatasetGenerator(tf.keras.utils.Sequence):
-    def __init__(self, chrom_names, data_dir, patch_size, indices, batch_size=32, shuffle=True):
+    def __init__(self, chrom_names, data_dir, patch_size, indices, name, batch_size=32, shuffle=True):
         self.chrom_names = chrom_names
         self.data_dir = data_dir
         self.patch_size = patch_size
+        self.name = name
         self.batch_size = batch_size
         self.shuffle = shuffle
 

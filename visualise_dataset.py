@@ -1,7 +1,5 @@
 from matplotlib import pyplot as plt
-import numpy as np
-from utils import get_split_graphset, get_split_dataset
-
+from util.utils import get_split_graphset
 
 if __name__ == '__main__':
     index = 2

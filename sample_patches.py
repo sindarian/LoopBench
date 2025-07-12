@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 import gutils
+from util.constants import RESOLUTION, PATCH_SIZE, SAMPLED_DATA_DIR
 from gutils import get_raw_graph, block_sampling, parsebed
 import random
 
@@ -99,29 +100,19 @@ def run_sample_patches(dataset_name,
                        bedpe_path,
                        image_txt_dir,
                        graph_txt_dir,
-                       chroms,
-                       patch_size):
-    dataset_path = os.path.join('dataset', dataset_name)
-    RES = 10000
+                       chroms):
+    dataset_path = os.path.join(SAMPLED_DATA_DIR, dataset_name)
     chrom_size_path = '{}.chrom.sizes'.format(assembly)
     bedpe_list = parsebed(bedpe_path, valid_threshold=1)
     os.makedirs(dataset_path, exist_ok=False)
     for cn in chroms:
         image_set, graph_set, labels, indicators = get_patches_different_downsampling_rate(chrom_name=cn,
-                                                                                           patch_size=patch_size,
+                                                                                           patch_size=PATCH_SIZE,
                                                                                            graph_txt_dir=graph_txt_dir,
                                                                                            image_txt_dir=image_txt_dir,
-                                                                                           resolution=RES,
+                                                                                           resolution=RESOLUTION,
                                                                                            chrom_sizes_path=chrom_size_path,
                                                                                            bedpe_list=bedpe_list)
-        # indicators.to_csv(os.path.join(dataset_path, 'indicators.{}.csv'.format(cn)))
         np.save(os.path.join(dataset_path, 'imageset.{}.npy'.format(cn)), image_set.astype('float32'))
-        # np.save(os.path.join(dataset_path, 'graphset.{}.npy'.format(cn)), graph_set.astype('float32'))
         np.save(os.path.join(dataset_path, 'labels.{}.npy'.format(cn)), labels.astype('int'))
-
-        # graph_nodes_identical = np.zeros((len(graph_set),), dtype='bool')
-        # for idx in range(len(graph_set)):
-        #     if indicators.iloc[idx * (2 * 64)]['locus'] == indicators.iloc[idx * (2 *64) + 64]['locus']:
-        #         graph_nodes_identical[idx] = True
-        # np.save(os.path.join(dataset_path, 'graph_identical.{}.npy'.format(cn)), graph_nodes_identical.astype('int'))
 

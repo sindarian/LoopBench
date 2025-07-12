@@ -1,5 +1,3 @@
-from logging import DEBUG
-
 import numpy as np
 import os
 import random
@@ -8,25 +6,15 @@ import pandas as pd
 from sklearn.metrics import f1_score
 import tensorflow as tf
 
+from constants import SEED, PATCH_SIZE
 from hi_c_data_generator import HiCDatasetGenerator
 from logger import Logger
 import logging
-import cooler
 
-from plotting import plot_pixel_counts
+from util.plotting.plotting import plot_pixel_counts
 
-# Configurable patch size
-GRAPH_SIZE = 128
-#PATCH_SIZE = 64
-PATCH_SIZE = 224
-FLATTENED_PATCH_SIZE = PATCH_SIZE*PATCH_SIZE
-
-# Logger configs
-LOG_LEVEL = DEBUG
 LOGGER = Logger(name='utils', level=logging.DEBUG).get_logger()
 
-# seed configs
-SEED = 1024
 np.random.seed(SEED)
 random.seed(SEED)
 
@@ -346,15 +334,33 @@ def create_hic_generators(chrom_names, data_dir, patch_size,
     test_idx = all_indices[val_end:]
 
     # Create generators
-    train_gen = HiCDatasetGenerator(chrom_names, data_dir, patch_size, train_idx, batch_size=batch_size, shuffle=True)
-    val_gen = HiCDatasetGenerator(chrom_names, data_dir, patch_size, val_idx, batch_size=batch_size, shuffle=False)
-    test_gen = HiCDatasetGenerator(chrom_names, data_dir, patch_size, test_idx, batch_size=batch_size, shuffle=False)
+    train_gen = HiCDatasetGenerator(chrom_names=chrom_names,
+                                    data_dir=data_dir,
+                                    patch_size=patch_size,
+                                    indices=train_idx,
+                                    batch_size=batch_size,
+                                    name='Train Generator',
+                                    shuffle=True)
+    val_gen = HiCDatasetGenerator(chrom_names=chrom_names,
+                                  data_dir=data_dir,
+                                  patch_size=patch_size,
+                                  indices=val_idx,
+                                  name='Validation Generator',
+                                  batch_size=batch_size,
+                                  shuffle=False)
+    test_gen = HiCDatasetGenerator(chrom_names=chrom_names,
+                                   data_dir=data_dir,
+                                   patch_size=patch_size,
+                                   indices=test_idx,
+                                   batch_size=batch_size,
+                                   name='Test Generator',
+                                   shuffle=False)
 
     return train_gen, val_gen, test_gen
 
-def visualize_data(generator, limit=10):
+def visualize_data(generator: HiCDatasetGenerator, limit: int = None, plot_neg: bool = False):
     # Compute distributions
     train_counts = count_pos_neg_distributions(generator, PATCH_SIZE)
 
     # Plot distributions
-    plot_pixel_counts(train_counts, "train", limit, True)
+    plot_pixel_counts(train_counts, generator.name, limit, plot_neg)

@@ -1,26 +1,23 @@
 #!/usr/bin/env python3
-import random
 import os
-import sys
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.layers import Input, Dropout, ReLU, Flatten, Activation, Conv2D, MaxPooling2D, Reshape, \
-    UpSampling2D, GaussianNoise, Dense
-from tensorflow.keras.layers import concatenate, add
+from tensorflow.keras.layers import Input, Dropout, ReLU, Activation, Reshape, \
+    Dense
 from tensorflow.keras.models import Model
 
 import tensorflow_addons as tfa
 import json
 
 from kgae.layers.graph import GraphConvolution
-from custom_layers import CombineConcat, Edge2Node
-from utils import PATCH_SIZE, GRAPH_SIZE, get_split_graphset, scale_hic, normalise_graphs
+from model.custom_layers import CombineConcat, Edge2Node
+from util.utils import PATCH_SIZE, GRAPH_SIZE, get_split_graphset, scale_hic, normalise_graphs
 from metrics import compute_auc
 
 
 def gnn_run(chroms, run_id, seed, dataset_name, epoch=50):
     # seed = hash(run_id)
-    dataset_dir = os.path.join('dataset', dataset_name)
+    dataset_dir = os.path.join('../dataset', dataset_name)
 
     print('#' * 10 + ' Start training GCN ' + '#'*10)
 
@@ -178,4 +175,4 @@ def gnn_run(chroms, run_id, seed, dataset_name, epoch=50):
     print('Validation AUC is {}. Validation AP is {}.'.format(val_auc, val_ap))
     print('Test AUC is {}. Test AP is {}.'.format(test_auc, test_ap))
 
-    GNN.save(os.path.join('models', '{}_GNN'.format(run_id)))
+    GNN.save(os.path.join('../outputs/models', '{}_GNN'.format(run_id)))

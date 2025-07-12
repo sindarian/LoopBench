@@ -135,8 +135,8 @@ dmypy.json
 /dataset_*/**
 !/dataset/.gitignore
 
-/models/**
-!/models/.gitignore
+/outputs/models/**
+!/outputs/models/.gitignore
 
 /predictions/**
 !/predictions/.gitignore
