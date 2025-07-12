@@ -3,71 +3,87 @@ import matplotlib.pyplot as plt
 import os
 import logging
 from logger import Logger
+import numpy as np
 
 LOGGER = Logger(name='plotting', level=logging.DEBUG).get_logger()
 
 PLOT_DIR = 'plots/'
 
-def plot_training_history(metric_dir):
-    # files = [f for f in os.listdir(metric_dir) if os.path.isfile(os.path.join(metric_dir, f)) and f.endswith('.json')]
-    # LOGGER.debug(f'Given metric dir: {metric_dir}')
-    # LOGGER.debug(f'files in {metric_dir}: {files}')
-
-    # histories, model_names = load_histories(metric_dir, files)
-    # paired_metrics = create_metric_pairs(histories)
-    # plot_metrics(histories, paired_metrics, model_names)
-
-    for f in os.listdir(metric_dir):
-        if os.path.isfile(os.path.join(metric_dir, f)) and f.endswith('.json'):
-            histories, model_names = load_histories(metric_dir, [f])
-            paired_metrics = create_metric_pairs(histories)
-            plot_metrics(histories, paired_metrics, model_names)
-
-
-def load_histories(metric_dir, files):
-    # load the saved model histories into a dictionary structure
+def load_histories(metric_dir):
     histories = []
     model_names = []
+    files = [f for f in os.listdir(metric_dir) if os.path.isfile(os.path.join(metric_dir, f)) and f.endswith('.json')]
     for file in files:
-        with open(os.path.join(metric_dir, file), 'r') as f:
-            history = json.load(f)
+        path = os.path.join(metric_dir, file)
+        with open(path, 'r') as f:
+            content = f.read()
+            history = json.loads(content)
             histories.append(history)
         model_names.append(file.split('_')[0])
     return histories, model_names
 
-def create_metric_pairs(histories):
-    # gather all the similar metrics into a list of tuples: [(loss, val_loss), ...]
-    metrics = list(histories[0].keys())
-    paired_metrics = []
-    for i, metric in enumerate(metrics[:int(len(metrics) / 2)]):
-        # the index of the corresponding validation metric is:
-        # the current index (the training metric) + half the size of the total number of metrics
-        v = int(i + (len(metrics) / 2))
-        paired_metrics.append((metric, metrics[v]))
-    LOGGER.debug(f'paired_metrics: {paired_metrics}')
-    return paired_metrics
+def plot_training_history(metric_dir):
+    histories, labels = load_histories(metric_dir)
+    # labels = ['efn', 'res']
+    colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red']
 
-def plot_metrics(histories, paired_metrics, model_names):
-    LOGGER.debug(f'Plotting metrics for {model_names}')
-    fig, axes = plt.subplots(3, 2, figsize=(14, 18))
+    # Extract metric pairs
+    all_metrics = list(histories[0].keys())
+    paired_metrics = [(m, f"val_{m}") for m in all_metrics if not m.startswith('val')]
+
+    import math
+
+    n_plots = len(paired_metrics)
+    rows = math.ceil(n_plots / 2)
+    fig, axes = plt.subplots(rows, 2, figsize=(14, rows * 5))
     axes = axes.flatten()
 
-    # iterate over all histories and plot the training and validation metrics for that axis
-    for model_index, history in enumerate(histories):
-        for i, pair in enumerate(paired_metrics):
-            ax = axes[i]
-            ax.plot(history[pair[0]], label='train')
-            ax.plot(history[pair[1]], label='val')
-            ax.set_title(pair[0])
-            ax.set_ylabel(pair[0])
-            ax.set_xlabel('Epoch')
-            ax.legend()
-            ax.grid(True)
+    for i, (train_metric, val_metric) in enumerate(paired_metrics):
+        ax = axes[i]
+        for model_idx, history in enumerate(histories):
+            color = colors[model_idx]
+            label_prefix = labels[model_idx]
 
-        # turn off any plots that weren't used
-        for ax in axes:
-            if not ax.lines:
-                ax.axis('off')
+            # Plot training metric
+            if train_metric in history:
+                ax.plot(history[train_metric], linestyle='-', color=color,
+                        label=f"{label_prefix} {train_metric}")
+            # Plot validation metric
+            if val_metric in history:
+                ax.plot(history[val_metric], linestyle=':', color=color,
+                        label=f"{label_prefix} {val_metric}")
 
-        LOGGER.info(f'Saving plot to {PLOT_DIR + model_names[model_index]}.png')
-        plt.savefig(PLOT_DIR + f'{model_names[model_index]}.png')
+        ax.set_title(train_metric)
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel(train_metric)
+        ax.grid(True)
+        ax.legend()
+
+    # Turn off unused subplots if any
+    for j in range(len(paired_metrics), len(axes)):
+        axes[j].axis('off')
+
+    plt.suptitle('Training Metrics Comparison', fontsize=16)
+    plt.tight_layout(rect=[0, 0.03, 1, 0.97])
+    plt.savefig(PLOT_DIR + 'training_evaluation.png')
+    plt.show()
+
+def plot_pixel_counts(data, title, limit=10, plot_neg=False):
+    print(len(data))
+    positives = [t[0] for t in data[:limit]]
+    indices = np.arange(len(positives))
+    print(len(positives))
+    print(len(indices))
+
+    plt.figure(figsize=(12, 6))
+    plt.bar(indices, positives, color='green', label='Positives')
+    if plot_neg:
+        negatives = [t[1] for t in data[:limit]]
+        plt.bar(indices, negatives, bottom=positives, color='red', alpha=0.5, label='Negatives')
+
+    plt.xlabel('Image')
+    plt.ylabel('Pixel Counts')
+    plt.title(f'Pixel Counts per Image (Positives and Negatives) for {title}')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
