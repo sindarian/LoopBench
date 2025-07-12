@@ -132,6 +132,7 @@ dmypy.json
 !/data/.gitignore
 
 /dataset/**
+/dataset_*/**
 !/dataset/.gitignore
 
 /models/**
