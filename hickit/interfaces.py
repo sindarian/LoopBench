@@ -29,6 +29,9 @@ class FlexSymmetricHeaded(SymmetricHeaded, FlexHeaded, ABC):
         self._cropped_headers = None
         self._loci_existence = None
 
+    def get_headers(self):
+        return self.headers
+
     def get_cropped_headers(self):
         if not self._filtered:
             raise NotFilteredException('The matrix has not yet been filtered.')

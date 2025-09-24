@@ -7,3 +7,7 @@ tensorflow_addons==0.15.0
 keras==2.7.0
 matplotlib==3.4.2
 fanc==0.9.25
+networkx~=3.1
+seaborn==0.13.2
+cooler~=0.9.3
+tqdm~=4.67.1

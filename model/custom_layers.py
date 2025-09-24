@@ -45,6 +45,9 @@ class ClipByValue(Layer):
         base_config = super(ClipByValue, self).get_config()
         return {**config, **base_config}
 
+    def compute_mask(self, inputs, mask=None):
+        return mask
+
 
 class HiCScale(Layer):
     def __init__(self, max_hic_value, **kwargs):

@@ -1,3 +1,5 @@
+from scipy.sparse import csc_matrix
+
 from .hic_exception import *
 import numpy as np
 from .utils import *
@@ -64,6 +66,28 @@ class BaseSymmetricMatrix(BaseHicMatrix, FlexSymmetricHeaded, Filterable, ABC):
         rows_to_keep = np.sum(
             np.logical_or(np.isnan(self.mat), self.mat == 0), 1
         ).astype(float) / len(self.mat[0, :]) <= percentage
+
+        # Calculate how many rows will be kept
+        num_rows_total = self.mat.shape[0]
+        num_rows_to_keep = np.sum(rows_to_keep).item()
+
+        # Print percentage of rows kept
+        percentage_kept = (num_rows_to_keep / num_rows_total) * 100
+        print(f'\n\nNumber of rows to keep: {num_rows_to_keep}')
+        print(f'Percentage of rows to keep: {percentage_kept:.2f}%')
+
+        # calculate number of nans
+        num_nans = np.sum(np.isnan(self.mat))
+        percentage_nans = (num_nans / self.mat.size) * 100
+        num_rows_with_nans = np.sum(np.any(np.isnan(self.mat), axis=1))
+        percent_nan_rows = (num_rows_with_nans / num_rows_total) * 100
+
+        # Print percentage of nans
+        print(f'\nNaN values in matrix: {num_nans}')
+        print(f'Num rows with nans: {num_rows_with_nans}')
+        print(f'Percent rows with nans: {percent_nan_rows:.2f}%')
+        print(f'Percentage of nans in matrix: {percentage_nans:.2f}%\n')
+
         self.mat = self.mat[rows_to_keep, :]
         self.mat = self.mat[:, rows_to_keep]
         if self._oe:

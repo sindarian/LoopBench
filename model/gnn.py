@@ -11,7 +11,8 @@ import json
 
 from kgae.layers.graph import GraphConvolution
 from model.custom_layers import CombineConcat, Edge2Node
-from util.utils import PATCH_SIZE, GRAPH_SIZE, get_split_graphset, scale_hic, normalise_graphs
+from util.constants import PATCH_SIZE, GRAPH_SIZE
+from util.utils import get_split_graphset, scale_hic, normalise_graphs
 from metrics import compute_auc
 
 

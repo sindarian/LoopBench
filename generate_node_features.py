@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import os
 from hickit.reader import get_headers, get_chrom_sizes
+from util.constants import GRAPH_SIZE
 
 
 def create_kmer_feature_df(the_headers: pd.DataFrame, gw_kmer_df):
@@ -40,22 +41,22 @@ def get_chrom_motif_features(chrom_name, dataset_dir, gw_motif_df, graph_size):
     return features.reshape((-1, graph_size, features.shape[1]))
 
 
-def run_generate_node_features(dataset_name, chroms, assembly_name):
+def run_generate_node_features(dataset_path, chroms, assembly_name):
     print('='*10 + ' Start generating node features ' + '='*10)
-    dataset_path = os.path.join('dataset', dataset_name)
+    # dataset_path = os.path.join('dataset', dataset_name)
     kmer_csv_path = os.path.join('data', 'kmer.{}.csv'.format(assembly_name))
     motif_csv_path = os.path.join('data', 'fimo.{}.csv'.format(assembly_name))
     gw_kmer_df = pd.read_csv(kmer_csv_path, dtype={'chrom': 'str'}, sep=',', index_col=False)
     for cn in chroms:
         kmer_features = get_chrom_kmer_features(
-            cn, dataset_path, gw_kmer_df, 128
+            cn, dataset_path, gw_kmer_df, GRAPH_SIZE
         )
         np.save(os.path.join(dataset_path, 'node_features.{}.npy'.format(cn)),
                 kmer_features.astype('float32'))
     gw_motif_df = pd.read_csv(motif_csv_path, dtype={'chrom': 'str'}, sep=',', index_col=False)
     for cn in chroms:
         motif_features = get_chrom_motif_features(
-            cn, dataset_path, gw_motif_df, 128
+            cn, dataset_path, gw_motif_df, GRAPH_SIZE
         )
         np.save(
             os.path.join(dataset_path, 'motif_features.{}.npy'.format(cn)),

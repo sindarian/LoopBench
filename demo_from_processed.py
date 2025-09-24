@@ -1,29 +1,128 @@
 import os
 
+from generators.chromosome_loader import ChromosomeLoader
+from generators.chromosome_processor import ChromosomeProcessor
+from gutils import parsebed
+from model.cnn import UNet
+from model.loop_net import LoopNet
+from model.chromosome_modeller import ChromosomeModeller
+from orchestrators.modelling import  test_models
 from util.plotting import plotting
-from util.constants import SAMPLED_DATA_DIR
-from sample_patches import run_sample_patches
-from train import train_run_cnn, train_loop_net
+from util.constants import OUTPUT_DIR, MODELS_DIR, PATCH_SIZE, RESOLUTION
 from util.logger import Logger
 import logging
 
-from util.utils import PATCH_SIZE, create_hic_generators, estimate_upper_bound, visualize_data
-
 LOGGER = Logger(name='demo_from_processed', level=logging.DEBUG).get_logger()
 
+def sample_data(use_original: bool = True, threshold: float = 0.95, normalization: str = "clip"):
+    # Create processor
+    chrom_processor = ChromosomeProcessor(
+        chromosome_list=target_chroms,
+        bedpe_dict=parsebed(target_bedpe_path, valid_threshold=1),
+        contact_data_dir=target_image_data_dir,
+        genome_assembly=target_assembly,
+        output_dir='dataset/hela_100',
+        patch_size=PATCH_SIZE,
+        resolution=RESOLUTION,
+        plot_chrom=False,
+        use_giloop=True
+    )
+
+    if use_original:
+        LOGGER.info("Sampling chromosomes with original sampling logic")
+        chrom_processor.process_all_chromosomes_as_patches()
+    else:
+        LOGGER.info(f'Sampling chromosomes with new sampling logic using threshold: {threshold}'
+                    f' and normalization: {normalization}')
+        chrom_processor.process_all_chromosomes_as_chromosomes(threshold, normalization)
+
+def load_data(batch: int = 8, split_ratios: tuple = (0.7, 0.2, 0.1), use_original: bool = True, upsample: bool = False,
+              factor: int = 3, threshold: int = 10, strategy: str = "balanced"):
+    # load the data into generators
+    loader = ChromosomeLoader(chromosomes=target_chroms,
+                              data_dir='dataset/hela_100',
+                              patch_size=PATCH_SIZE,
+                              batch_size=batch,
+                              split_ratios=split_ratios,
+                              use_original=use_original)
+
+    train_gen, val_gen, test_gen = loader.create_chromosome_generators(upsample=upsample,
+                                                                       factor=factor,
+                                                                       threshold=threshold,
+                                                                       strategy=strategy)
+
+    return train_gen, val_gen, test_gen
+
+
+def run_original(batch: int = 8, split_ratios: tuple = (0.7, 0.2, 0.1), use_original: bool = True, epochs: int = 30,
+                 resample: bool = False):
+    if resample:
+        sample_data(use_original)
+
+    # # load the data into generators
+    # loader = ChromosomeLoader(chromosomes=target_chroms,
+    #                           data_dir='dataset/hela_100',
+    #                           patch_size=PATCH_SIZE,
+    #                           batch_size=batch,
+    #                           split_ratios=split_ratios,
+    #                           use_original=use_original)
+    #
+    # train_gen, val_gen, test_gen = loader.create_chromosome_generators()
+
+    train_gen, val_gen, test_gen = load_data(batch, split_ratios)
+
+    giloop_modeller = ChromosomeModeller(model=UNet(patch_size=PATCH_SIZE),
+                                         train_generator=train_gen,
+                                         val_generator=val_gen,
+                                         test_generator=test_gen,
+                                         epochs=epochs)
+    # giloop_modeller.run(use_original)
+    giloop_modeller.run_n_times(num_runs=5, drop_worst=2, train_original=True)
+
+def run_new_models(batch: int = 8, split_ratios: tuple = (0.7, 0.2, 0.1), use_original: bool = False,
+                   threshold: float = 0.95, normalization: str = "clip", epochs: int = 30, resample: bool = False):
+    if resample:
+        sample_data(use_original, threshold, normalization)
+
+    # # load the data into generators
+    # loader = ChromosomeLoader(chromosomes=target_chroms,
+    #                           data_dir='dataset/hela_100',
+    #                           patch_size=PATCH_SIZE,
+    #                           batch_size=batch,
+    #                           split_ratios=split_ratios,
+    #                           use_original=use_original)
+    #
+    # train_gen, val_gen, test_gen = loader.create_chromosome_generators(upsample=True,
+    #                                                                    factor=3,
+    #                                                                    threshold=10,
+    #                                                                    strategy="balanced")
+
+    train_gen, val_gen, test_gen = load_data(batch, split_ratios, use_original, True, 3, 10, "balanced")
+
+    unet_modeller = ChromosomeModeller(model=UNet(model_name="UNet",
+                                                  save_as="unet",
+                                                  patch_size=PATCH_SIZE),
+                                       train_generator=train_gen,
+                                       val_generator=val_gen,
+                                       test_generator=test_gen,
+                                       epochs=epochs)
+    loopnet_modeller = ChromosomeModeller(model=LoopNet(patch_size=PATCH_SIZE),
+                                          train_generator=train_gen,
+                                          val_generator=val_gen,
+                                          test_generator=test_gen,
+                                          epochs=epochs)
+    # unet_modeller.run(use_original)
+    unet_modeller.run_n_times(num_runs=5, drop_worst=2, train_original=use_original)
+    # loopnet_modeller.run(use_original)
+    loopnet_modeller.run_n_times(num_runs=5, drop_worst=2, train_original=use_original)
 
 if __name__ == '__main__':
-    ################################################################################
-    ##  Define the macros. Change the variables below according to what you need  ##
-    ################################################################################
-
     # Define the unique ID for this run of experiment
     # (i.e. the unique name of the model trained in this experiment)
     run_id = 'demo'
 
     # Specify the genome assemblies (reference genome) of the source and target Hi-C/ChIA-PET
     # In this demo, source and target cell lines are sequenced with different assembly genomes
-    source_assembly = 'hg19'
     target_assembly = 'hg38'
 
     # The path to the ChIA-PET annotation files
@@ -42,19 +141,10 @@ if __name__ == '__main__':
     # Specify the directory that contains the images and graphs of the source cell line
     # You can use a mixed downsampling rate, but here we use an identical sequencing depth
     # for both graph and image
-    source_image_data_dir = 'data/txt_gm12878_50'
-    source_graph_data_dir = 'data/txt_gm12878_50'
-
-    # Specify the data dir for target cell line
     target_image_data_dir = 'data/txt_hela_100'
     target_graph_data_dir = 'data/txt_hela_100'
 
-    # Name the sampled datasets with unique identifiers you like
-    source_dataset_name = 'gm12878_50'
     target_dataset_name = 'hela_100'
-
-    # Define the chromosomes we draw training data from
-    source_chroms = [str(i) for i in range(1, 23)] + ['X']
 
     # Define the chromosomes of the target cell line we want to predict on
     target_chroms = \
@@ -67,72 +157,62 @@ if __name__ == '__main__':
     # Set the path to the output file, where saves the annotations
     output_path = 'predictions/demo.bedpe'
 
-
-    ##############################################################################
-    ###               The GILoop core algorithm starts from here               ###
-    ##############################################################################
-
-    resample_data = False # resample usually when you adjust the PATCH_SIZE or RESOLUTION
-
-    if resample_data:
-        LOGGER.info('SAMPLING SOURCE CELL LINE - GM12878 w/ hg19')
-        # Sample patches for source cell line
-        run_sample_patches(dataset_name=source_dataset_name,
-                           assembly=source_assembly,
-                           bedpe_path=source_bedpe_path,
-                           image_txt_dir=source_image_data_dir,
-                           graph_txt_dir=source_graph_data_dir,
-                           chroms=source_chroms)
-
-        LOGGER.info('Sampling the target cell line - HeLa100 w/ hg38')
-        # Sample patches for target cell line
-        run_sample_patches(dataset_name=target_dataset_name,
-                           assembly=target_assembly,
-                           bedpe_path=target_bedpe_path,
-                           image_txt_dir=target_image_data_dir,
-                           graph_txt_dir=target_graph_data_dir,
-                           chroms=target_chroms)
-
-    LOGGER.info('Create Generators for Train, Val, and Test Data')
-    train_gen, val_gen, test_gen = create_hic_generators(
-        chrom_names=source_chroms,
-        data_dir=os.path.join(SAMPLED_DATA_DIR, source_dataset_name),
-        patch_size=PATCH_SIZE,
-        split_ratios=(0.8, 0.1, 0.1), # train, val, test
-        batch_size=8
-    )
-
-    # visualize the training data distribution
-    visualize_data(train_gen)
-
-    # estimate the upper bound of the training data
-    # this is used to scale the data and clip outliers when the model is built
-    x_train_upper_bound = estimate_upper_bound(train_gen, percentile=0.996)
-    print("99.6% upper bound:", x_train_upper_bound)
-
-    # build, train, and run a CNN and LoopNet for loop calling
-    train_run_cnn(train_gen=train_gen,
-                  val_gen=val_gen,
-                  test_gen=test_gen,
-                  clip_value=x_train_upper_bound,
-                  epochs=2)
-    train_loop_net(train_gen=train_gen,
-                   val_gen=val_gen,
-                   test_gen=test_gen,
-                   clip_value=x_train_upper_bound,
-                   epochs=2)
-
-    # LOGGER.info('Testing the U-net models')
-    # Predict on the target cell line
-    # run_output_predictions(
-    #     run_id,
-    #     'Finetune',
-    #     threshold,
-    #     target_dataset_name,
-    #     target_assembly,
-    #     target_chroms,
-    #     output_path,
-    #     mode
+    # # Create processor
+    # chrom_processor = ChromosomeProcessor(
+    #     chromosome_list=target_chroms,
+    #     bedpe_dict=parsebed(target_bedpe_path, valid_threshold=1),
+    #     contact_data_dir=target_image_data_dir,
+    #     genome_assembly=target_assembly,
+    #     output_dir='dataset/hela_100',
+    #     patch_size=PATCH_SIZE,
+    #     resolution=RESOLUTION,
+    #     plot_chrom=False,
+    #     use_giloop=True
     # )
+    #
+    # if use_original:
+    #     chrom_processor.process_all_chromosomes_as_patches()
+    # else:
+    #     chrom_processor.process_all_chromosomes_as_chromosomes(threshold=0.95, normalization="clip")
+    # # load the data into generators
+    # loader = ChromosomeLoader(chromosomes=target_chroms,
+    #                           data_dir='dataset/hela_100',
+    #                           patch_size=PATCH_SIZE,
+    #                           batch_size=8,
+    #                           split_ratios=(0.7, 0.2, 0.1),
+    #                           use_original=use_original)
+    # train_gen, val_gen, test_gen = loader.create_chromosome_generators(upsample=True,
+    #                                                                    factor=3,
+    #                                                                    threshold=10,
+    #                                                                    strategy="balanced")
+    #
+    # # plot the data
+    # # plotting.plot_chromosome_labels(target_chroms, use_original=use_original)
+    # # data_to_plot, _, _ = loader.create_chromosome_generators(upsample=False)
+    # # loader.visualize_data(data_to_plot.copy(1))
+    #
+    # unet_modeller = ChromosomeModeller(model=UNet(patch_size=PATCH_SIZE),
+    #                               train_generator=train_gen,
+    #                               val_generator=val_gen,
+    #                               test_generator=test_gen,
+    #                               epochs=10)
+    # loopnet_modeller = ChromosomeModeller(model=LoopNet(patch_size=PATCH_SIZE),
+    #                                    train_generator=train_gen,
+    #                                    val_generator=val_gen,
+    #                                    test_generator=test_gen,
+    #                                    epochs=10)
+    # unet_modeller.run(use_original)
+    # loopnet_modeller.run(use_original)
 
-    plotting.plot_training_history()
+    # plot the training history
+
+    run_original(resample=False, epochs=1)
+    run_new_models(resample=False, epochs=1)
+    plotting.plot_training_history(title='Training Metrics Comparison')
+
+    # if TEST:
+        # test_models(cnn_path=os.path.join(OUTPUT_DIR, MODELS_DIR, 'cnn_ps224_res10000.h5'),
+        #             loopnet_path=os.path.join(OUTPUT_DIR, MODELS_DIR, 'loopnet_ps224_res10000.h5'),
+        #             cell_line=target_dataset_name,
+        #             assembly=target_assembly,
+        #             chroms=target_chroms)

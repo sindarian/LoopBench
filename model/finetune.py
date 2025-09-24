@@ -8,7 +8,8 @@ from tensorflow.keras.models import Model
 import tensorflow_addons as tfa
 
 from model.custom_layers import CombineConcat, BilinearFusion
-from util.utils import PATCH_SIZE, scale_hic, normalise_graphs, get_split_dataset
+from util.constants import PATCH_SIZE
+from util.utils import scale_hic, normalise_graphs, get_split_dataset
 from metrics import compute_auc
 
 
