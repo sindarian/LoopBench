@@ -404,3 +404,58 @@ def compute_l1(x1, y1, x2, y2):
 def compute_main_diagonal_distance(i, j):
     # Distance to line from top-right to bottom-left
     return j-i
+
+def print_metrics_table(avg_train_metrics, avg_val_metrics, avg_test_metrics, split_scenario_name, patch_size, resolution):
+    metric_names = [
+        "binary_accuracy",
+        "ROC_AUC",
+        "PR_AUC",
+        "recall",
+        "precision",
+        "specificity",
+        "avg_perf",
+        "geo_mean"
+    ]
+
+    # Scenario header
+    if split_scenario_name:
+        print(f"\nAverage Metrics for scenario: quantile={split_scenario_name[0]}, "
+              f"normalization={','.join(split_scenario_name[1:])}, patch_size={patch_size}, resolution={resolution}")
+
+    # Table header
+    print(f"{'Metric':<15} {'Train':>10} {'Val':>10} {'Test':>10}")
+    print("-" * 50)
+
+    # Table rows - now using dictionary access instead of positional
+    for name in metric_names:
+        if name in avg_train_metrics:  # Check if metric exists
+            train_val = avg_train_metrics[name]
+            val_val = avg_val_metrics[name]
+            test_val = avg_test_metrics[name]
+            print(f"{name:<15} {train_val:10.4f} {val_val:10.4f} {test_val:10.4f}")
+    print()
+
+# def print_metrics_table(avg_train_metrics, avg_val_metrics, avg_test_metrics, split_scenario_name):
+#     metric_names = [
+#         "binary_accuracy",
+#         "ROC_AUC",
+#         "PR_AUC",
+#         "recall",
+#         "precision",
+#         "specificity",
+#         "geo_mean"
+#     ]
+#
+#     # Scenario header
+#     if split_scenario_name:
+#         print(f"\nAverage Metrics for scenario: quantile={split_scenario_name[0]}, "
+#               f"normalization={','.join(split_scenario_name[1:])}")
+#
+#     # Table header
+#     print(f"{'Metric':<15} {'Train':>10} {'Val':>10} {'Test':>10}")
+#     print("-" * 50)
+#
+#     # Table rows
+#     for name, avg_train, avg_val, avg_test in zip(metric_names, avg_train_metrics, avg_val_metrics, avg_test_metrics):
+#         print(f"{name:<15} {avg_train:10.4f} {avg_val:10.4f} {avg_test:10.4f}")
+#     print()

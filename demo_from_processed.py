@@ -1,20 +1,38 @@
-import os
+from typing import Tuple, Literal
 
+from generators.chromosome_generator import ChromosomeGenerator
 from generators.chromosome_loader import ChromosomeLoader
 from generators.chromosome_processor import ChromosomeProcessor
 from gutils import parsebed
 from model.cnn import UNet
 from model.loop_net import LoopNet
 from model.chromosome_modeller import ChromosomeModeller
-from orchestrators.modelling import  test_models
 from util.plotting import plotting
 from util.constants import OUTPUT_DIR, MODELS_DIR, PATCH_SIZE, RESOLUTION
 from util.logger import Logger
 import logging
 
+from util.utils import print_metrics_table
+
 LOGGER = Logger(name='demo_from_processed', level=logging.DEBUG).get_logger()
 
-def sample_data(use_original: bool = True, threshold: float = 0.95, normalization: str = "clip"):
+
+def sample_data(
+    use_original: bool = True,
+    threshold: float = 0.95,
+    normalization: Literal["log2", "clip", "divide"] = "clip"
+) -> None:
+    """
+    Sample and optionally normalize the chromosome dataset.
+
+    Args:
+        use_original (bool): Whether to use the original dataset format.
+        threshold (float): Confidence threshold for filtering samples.
+        normalization (str): Method used for normalization.
+
+    Returns:
+        None
+    """
     # Create processor
     chrom_processor = ChromosomeProcessor(
         chromosome_list=target_chroms,
@@ -36,8 +54,30 @@ def sample_data(use_original: bool = True, threshold: float = 0.95, normalizatio
                     f' and normalization: {normalization}')
         chrom_processor.process_all_chromosomes_as_chromosomes(threshold, normalization)
 
-def load_data(batch: int = 8, split_ratios: tuple = (0.7, 0.2, 0.1), use_original: bool = True, upsample: bool = False,
-              factor: int = 3, threshold: int = 10, strategy: str = "balanced"):
+def load_data(
+    batch: int = 8,
+    split_ratios: Tuple[float, float, float] = (0.7, 0.2, 0.1),
+    use_original: bool = True,
+    upsample: bool = False,
+    factor: int = 3,
+    threshold: int = 10,
+    strategy: Literal["balanced", "random", None] = "balanced"
+) -> (ChromosomeGenerator, ChromosomeGenerator, ChromosomeGenerator):
+    """
+    Load and prepare the sampled dataset for training and evaluation.
+
+    Args:
+        batch (int): Batch size for data loading.
+        split_ratios (Tuple[float, float, float]): Ratios for train, validation, and test sets.
+        use_original (bool): Whether to use the original dataset format.
+        upsample (bool): Whether to upsample underrepresented classes.
+        factor (int): Upsampling factor (if upsample is True).
+        threshold (int): Minimum sample count threshold per class.
+        strategy (str): Sampling strategy to use. Options: "balanced", "random", None".
+
+    Returns:
+        train generator, validation generator, and test generator.
+    """
     # load the data into generators
     loader = ChromosomeLoader(chromosomes=target_chroms,
                               data_dir='dataset/hela_100',
@@ -54,20 +94,31 @@ def load_data(batch: int = 8, split_ratios: tuple = (0.7, 0.2, 0.1), use_origina
     return train_gen, val_gen, test_gen
 
 
-def run_original(batch: int = 8, split_ratios: tuple = (0.7, 0.2, 0.1), use_original: bool = True, epochs: int = 30,
-                 resample: bool = False):
+def run_original(
+    batch: int = 8,
+    split_ratios: Tuple[float, float, float] = (0.7, 0.2, 0.1),
+    epochs: int = 30,
+    resample: bool = False,
+    num_runs: int = 5,
+    drop_worst: int = 2
+) -> None:
+    """
+    Run training using the original model setup.
+
+    Args:
+        batch (int): Batch size used during training.
+        split_ratios (Tuple[float, float, float]): Ratios for train, validation, and test splits.
+        epochs (int): Number of training epochs.
+        resample (bool): Whether to apply data resampling.
+        num_runs (int): Number of times to run the model
+        drop_worst (int): Number of lowest performing runs to drop the average model performance calculation
+
+    Returns:
+        None
+    """
+    use_original = True
     if resample:
         sample_data(use_original)
-
-    # # load the data into generators
-    # loader = ChromosomeLoader(chromosomes=target_chroms,
-    #                           data_dir='dataset/hela_100',
-    #                           patch_size=PATCH_SIZE,
-    #                           batch_size=batch,
-    #                           split_ratios=split_ratios,
-    #                           use_original=use_original)
-    #
-    # train_gen, val_gen, test_gen = loader.create_chromosome_generators()
 
     train_gen, val_gen, test_gen = load_data(batch, split_ratios)
 
@@ -76,51 +127,69 @@ def run_original(batch: int = 8, split_ratios: tuple = (0.7, 0.2, 0.1), use_orig
                                          val_generator=val_gen,
                                          test_generator=test_gen,
                                          epochs=epochs)
-    # giloop_modeller.run(use_original)
-    giloop_modeller.run_n_times(num_runs=5, drop_worst=2, train_original=True)
+    avg_metrics, best_metrics = giloop_modeller.run_n_times(num_runs, drop_worst, train_original=use_original)
+    print('Metrics Table for Original GILoop')
+    print_metrics_table(avg_metrics, best_metrics, None)
 
-def run_new_models(batch: int = 8, split_ratios: tuple = (0.7, 0.2, 0.1), use_original: bool = False,
-                   threshold: float = 0.95, normalization: str = "clip", epochs: int = 30, resample: bool = False):
+
+def run_new_models(
+        batch: int = 8,
+        split_ratios: Tuple[float, float, float] = (0.7, 0.2, 0.1),
+        threshold: float = 0.95,
+        normalization: Literal["log2", "clip", "divide"] = "clip",
+        epochs: int = 30,
+        resample: bool = False,
+        num_runs: int = 5,
+        drop_worst: int = 2,
+        run_Unet: bool = True,
+        run_LoopNet: bool = True
+) -> None:
+    """
+    Run training on new models with specified parameters.
+
+    Args:
+        batch (int): Batch size used during training.
+        split_ratios (tuple): Train, validation, and test split ratios.
+        threshold (float): Confidence threshold for predictions.
+        normalization (str): Method used to normalize data.
+        epochs (int): Number of training epochs.
+        resample (bool): Whether to apply data resampling.
+        num_runs (int): Number of times to run the model
+        drop_worst (int): Number of lowest performing runs to drop the average model performance calculation
+
+    Returns:
+        None
+    """
+    use_original = False
     if resample:
         sample_data(use_original, threshold, normalization)
 
-    # # load the data into generators
-    # loader = ChromosomeLoader(chromosomes=target_chroms,
-    #                           data_dir='dataset/hela_100',
-    #                           patch_size=PATCH_SIZE,
-    #                           batch_size=batch,
-    #                           split_ratios=split_ratios,
-    #                           use_original=use_original)
-    #
-    # train_gen, val_gen, test_gen = loader.create_chromosome_generators(upsample=True,
-    #                                                                    factor=3,
-    #                                                                    threshold=10,
-    #                                                                    strategy="balanced")
+    train_gen, val_gen, test_gen = load_data(batch, split_ratios, use_original, True, 3, 10, "random")
 
-    train_gen, val_gen, test_gen = load_data(batch, split_ratios, use_original, True, 3, 10, "balanced")
+    if run_Unet:
+        unet_modeller = ChromosomeModeller(model=UNet(model_name="UNet",
+                                                      save_as="unet",
+                                                      patch_size=PATCH_SIZE),
+                                           train_generator=train_gen,
+                                           val_generator=val_gen,
+                                           test_generator=test_gen,
+                                           epochs=epochs)
+        avg_train_metrics, avg_val_metrics, avg_test_metrics = unet_modeller.run_n_times(num_runs, drop_worst, train_original=use_original)
+        print('Metrics Table for Enhanced GILoop')
+        print_metrics_table(avg_train_metrics, avg_val_metrics, avg_test_metrics, [threshold, normalization])
 
-    unet_modeller = ChromosomeModeller(model=UNet(model_name="UNet",
-                                                  save_as="unet",
-                                                  patch_size=PATCH_SIZE),
-                                       train_generator=train_gen,
-                                       val_generator=val_gen,
-                                       test_generator=test_gen,
-                                       epochs=epochs)
-    loopnet_modeller = ChromosomeModeller(model=LoopNet(patch_size=PATCH_SIZE),
-                                          train_generator=train_gen,
-                                          val_generator=val_gen,
-                                          test_generator=test_gen,
-                                          epochs=epochs)
-    # unet_modeller.run(use_original)
-    unet_modeller.run_n_times(num_runs=5, drop_worst=2, train_original=use_original)
-    # loopnet_modeller.run(use_original)
-    loopnet_modeller.run_n_times(num_runs=5, drop_worst=2, train_original=use_original)
+    if run_LoopNet:
+        loopnet_modeller = ChromosomeModeller(model=LoopNet(patch_size=PATCH_SIZE),
+                                              train_generator=train_gen,
+                                              val_generator=val_gen,
+                                              test_generator=test_gen,
+                                              epochs=epochs)
+
+        avg_train_metrics, avg_val_metrics, avg_test_metrics = loopnet_modeller.run_n_times(num_runs, drop_worst, train_original=use_original)
+        print('Metrics Table for LoopNet')
+        print_metrics_table(avg_train_metrics, avg_val_metrics, avg_test_metrics, [threshold, normalization])
 
 if __name__ == '__main__':
-    # Define the unique ID for this run of experiment
-    # (i.e. the unique name of the model trained in this experiment)
-    run_id = 'demo'
-
     # Specify the genome assemblies (reference genome) of the source and target Hi-C/ChIA-PET
     # In this demo, source and target cell lines are sequenced with different assembly genomes
     target_assembly = 'hg38'
@@ -150,69 +219,14 @@ if __name__ == '__main__':
     target_chroms = \
         [str(i) for i in range(1, 18)] + \
         [str(i) for i in range(19, 23)] + ['X'] # Chr18 of HeLa-S3 is absent in the Hi-C file
+    # target_chroms = ['1']
 
     # Set the threshold cutting off the probability map to generate the final annotations
-    threshold = 0.48
+    # threshold = 0.48
 
     # Set the path to the output file, where saves the annotations
     output_path = 'predictions/demo.bedpe'
 
-    # # Create processor
-    # chrom_processor = ChromosomeProcessor(
-    #     chromosome_list=target_chroms,
-    #     bedpe_dict=parsebed(target_bedpe_path, valid_threshold=1),
-    #     contact_data_dir=target_image_data_dir,
-    #     genome_assembly=target_assembly,
-    #     output_dir='dataset/hela_100',
-    #     patch_size=PATCH_SIZE,
-    #     resolution=RESOLUTION,
-    #     plot_chrom=False,
-    #     use_giloop=True
-    # )
-    #
-    # if use_original:
-    #     chrom_processor.process_all_chromosomes_as_patches()
-    # else:
-    #     chrom_processor.process_all_chromosomes_as_chromosomes(threshold=0.95, normalization="clip")
-    # # load the data into generators
-    # loader = ChromosomeLoader(chromosomes=target_chroms,
-    #                           data_dir='dataset/hela_100',
-    #                           patch_size=PATCH_SIZE,
-    #                           batch_size=8,
-    #                           split_ratios=(0.7, 0.2, 0.1),
-    #                           use_original=use_original)
-    # train_gen, val_gen, test_gen = loader.create_chromosome_generators(upsample=True,
-    #                                                                    factor=3,
-    #                                                                    threshold=10,
-    #                                                                    strategy="balanced")
-    #
-    # # plot the data
-    # # plotting.plot_chromosome_labels(target_chroms, use_original=use_original)
-    # # data_to_plot, _, _ = loader.create_chromosome_generators(upsample=False)
-    # # loader.visualize_data(data_to_plot.copy(1))
-    #
-    # unet_modeller = ChromosomeModeller(model=UNet(patch_size=PATCH_SIZE),
-    #                               train_generator=train_gen,
-    #                               val_generator=val_gen,
-    #                               test_generator=test_gen,
-    #                               epochs=10)
-    # loopnet_modeller = ChromosomeModeller(model=LoopNet(patch_size=PATCH_SIZE),
-    #                                    train_generator=train_gen,
-    #                                    val_generator=val_gen,
-    #                                    test_generator=test_gen,
-    #                                    epochs=10)
-    # unet_modeller.run(use_original)
-    # loopnet_modeller.run(use_original)
-
-    # plot the training history
-
-    run_original(resample=False, epochs=1)
-    run_new_models(resample=False, epochs=1)
+    # run_original(resample=False, epochs=30, num_runs=4, drop_worst=1)
+    run_new_models(resample=False, epochs=30, num_runs=4, drop_worst=1, run_Unet=False)
     plotting.plot_training_history(title='Training Metrics Comparison')
-
-    # if TEST:
-        # test_models(cnn_path=os.path.join(OUTPUT_DIR, MODELS_DIR, 'cnn_ps224_res10000.h5'),
-        #             loopnet_path=os.path.join(OUTPUT_DIR, MODELS_DIR, 'loopnet_ps224_res10000.h5'),
-        #             cell_line=target_dataset_name,
-        #             assembly=target_assembly,
-        #             chroms=target_chroms)

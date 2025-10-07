@@ -9,7 +9,7 @@ from keras.models import load_model
 from model.custom_layers import ClipByValue
 from util.constants import METRICS_DIR, OUTPUT_DIR, MODELS_DIR, PATCH_SIZE, RESOLUTION
 from util.logger import Logger
-from metrics import compute_auc, compute_all_metrics, Specificity, AverageMetric
+from metrics import compute_all_metrics, Specificity, AverageMetric, plot_per_sample_metrics
 
 
 class BaseModel(object):
@@ -17,15 +17,20 @@ class BaseModel(object):
                      save_as='base_model',
                      ext='.h5',
                      patch_size=PATCH_SIZE,
-                     monitor_metric='val_avg_perf',
                      min_delta=0.0001,
-                     patience=7):
+                     patience=7,
+                     avg_metric='geo_mean'):
+            if avg_metric != 'geo_mean' and avg_metric != 'avg_perf':
+                raise ValueError("Only geo_mean and avg_perf are supported as the average metric")
+
             self.model = None
+            self.history = None
             self.model_name = model_name
             self.save_as = save_as
             self.ext = ext
             self.patch_size = patch_size
-            self.monitor_metric = monitor_metric
+            self.monitor_metric = "val_" + avg_metric
+            self.avg_metric = avg_metric
             self.min_delta = min_delta
             self.patience = patience
             self.LOGGER = Logger(name=self.model_name, level=logging.DEBUG).get_logger()
@@ -48,6 +53,7 @@ class BaseModel(object):
                                                 ],
                                      verbose=1)
 
+            self.history = history.history
             self.save_model(history)
 
         def test(self, test_gen):
@@ -59,8 +65,9 @@ class BaseModel(object):
                 y_true_batches.append(y_batch)
             y_true = np.concatenate(y_true_batches, axis=0)
 
-            all_test_metrics = compute_all_metrics(y_pred, y_true.astype('bool'))
-            return all_test_metrics
+            # all_test_metrics = compute_all_metrics(y_pred, y_true.astype('bool'), avg_metric=self.avg_metric)
+            # return all_test_metrics
+            all_test_metrics = plot_per_sample_metrics(y_pred, y_true.astype('bool'))
 
         def save_model(self, history):
             print(f'Saving {self.model_name} model and training history')

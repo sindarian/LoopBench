@@ -1,3 +1,5 @@
+import runpy
+import sys
 from collections import defaultdict
 
 import numpy as np
@@ -6,9 +8,12 @@ from scipy.sparse import diags, csc_matrix, csr_matrix
 import os
 from subprocess import run
 import pandas as pd
+
+import mustace_orig
 from hickit.reader import get_chrom_sizes, get_headers
 from hickit.matrix import CisMatrix
 from model.custom_layers import ClipByValue
+from mustache import regulator, mustache_norm
 from util.constants import RESOLUTION
 from util.plotting.plotting import plot_raw_crhom
 
@@ -529,25 +534,60 @@ def create_sparse_csc_interaction_matrix(chr_index, txt_dir, chrom_size_path, re
 
     upper_bound = np.quantile(contacts, threshold)
 
+    # init an empty sparse matrix and populate it with the normalized values
+    sparse_mat = initialise_sparse_csc_mat(chr_index, resolution, chrom_size_path)
+    used_mustache = False
+
     norms = normalization.split(',')
     for norm in norms:
         if norm == 'log2':
             contacts = np.log2(contacts + 1)
+        elif norm == 'log':
+            contacts = np.log(contacts + 1)
         elif norm == 'clip':
             contacts = ClipByValue(upper_bound)(contacts)
         elif norm == 'divide':
             contacts = contacts / upper_bound
-        # elif norm == 'mustache': # TODO mustache
-        #     contacts = mustach_dog(contacts)
-        else:
-            raise ValueError('Normalization method not recognized')
+        elif norm == 'zscore':
+            contacts = (contacts - np.mean(contacts)) / np.std(contacts) #TODO: store mean/std dev in pkl, would including these as input to network improve perf?
+        elif norm == 'mustache':
+            used_mustache = True
+            chrom_contacts = csc_matrix(sparse_mat, copy=True)
+            chrom_contacts[rows, cols] = contacts
+            contacts = mustache_norm(chrom_contacts, res=resolution, pt=0.01, distance_filter=2000000, num_processes=5)
 
-    # init an empty sparse matrix and populate it with the normalized values
-    sparse_mat = initialise_sparse_csc_mat(chr_index, resolution, chrom_size_path)
-    sparse_mat[rows, cols] = contacts
+            ### using orig
+            argv = [
+                "-f", "./data/hela_s3.hic",
+                "-r", "10kb",
+                "-pt", "0.01",
+                "-p", "1",
+                "-d", "2000000",
+                "-ch", f"{chr_index}",
+            ]
+            # contacts = mustace_orig.main(argv)
+        #     if argv is None:
+        #         argv = []
+        #     old_argv = sys.argv
+        #     try:
+        #         # Run and capture module globals to retrieve full_chrom
+        #         sys.argv = ["mustace_orig"] + list(argv)
+        #         mod_globals = runpy.run_module("mustace_orig", run_name="__main__")
+        #         full_chrom = mod_globals.get("full_chrom")
+        #     finally:
+        #         sys.argv = old_argv
+        #
+        #     if full_chrom is None:
+        #         raise RuntimeError("mustache run did not produce 'full_chrom' in module globals")
+        # else:
+        #     raise ValueError('Normalization method not recognized')
 
-    # Symmetrize the matrix by adding its transpose to itself.
-    sparse_mat = sparse_mat + sparse_mat.transpose() - diags(sparse_mat.diagonal())
+    if not used_mustache:
+        sparse_mat[rows, cols] = contacts
+        # Symmetrize the matrix by adding its transpose to itself.
+        sparse_mat = sparse_mat + sparse_mat.transpose() - diags(sparse_mat.diagonal())
+    else:
+        sparse_mat = csc_matrix(contacts)
 
     return sparse_mat, upper_bound
 

@@ -8,7 +8,7 @@ import numpy as np
 from typing import List, Dict, Generator
 from pathlib import Path
 
-from scipy.sparse import csc_matrix, save_npz
+from scipy.sparse import csc_matrix, save_npz, hstack, vstack
 from tqdm import tqdm
 
 from gutils import get_raw_graph, block_sampling, block_sampling_mustache, create_ground_truth, get_raw_graph_optimized
@@ -316,15 +316,16 @@ class ChromosomeProcessor:
             chromosome = sampling_param_group[0]
             threshold = sampling_param_group[1]
             norm_method = sampling_param_group[2]
-            print(f'\nProcessing chromosome {chromosome} with threshold {threshold} and {norm_method} normalization')
+            print(f'\nProcessing chromosome {chromosome} with:\nthreshold {threshold}\n{norm_method} normalization\npatch size {self.patch_size}\nresolution {self.resolution}')
 
             # load the contacts
             contacts, chrom_upper_bound = self._load_matrix_for_chromosome_optimized(chromosome, threshold, norm_method)
 
             padded_contacts, padded_ground_truth, patch_indices = self.create_contact_dependent_data(contacts)
 
-            # create a path just for this sampled data
-            path = Path((str(self.output_dir)) + f'_{threshold}_quant_{norm_method.replace(",", "_")}')
+            path = Path((str(self.output_dir)) + f'_{threshold}_quant_{norm_method.replace(",", "_")}_ps_{self.patch_size}_rs_{self.resolution}')
+            print(f'Saving sampled data in {str(path)}')
+
             if not path.exists():
                 path.mkdir(parents=True, exist_ok=True)
 
@@ -352,10 +353,11 @@ class ChromosomeProcessor:
                           start[0] + self.patch_size,
                           start[1] + self.patch_size) for start in start_positions]
 
+        # Pad the contact and ground truth data by the patch size
         padded_contacts = self.pad_matrix_bottom_right(contacts.mat,
-                                                       pad_size=64)
+                                                       pad_size=self.patch_size)
         padded_ground_truth = self.pad_matrix_bottom_right(ground_truth,
-                                                           pad_size=64).astype(bool)
+                                                           pad_size=self.patch_size).astype(bool)
 
         return padded_contacts, padded_ground_truth, patch_indices
 
@@ -380,30 +382,45 @@ class ChromosomeProcessor:
 
         return image_matrix
 
-    def pad_matrix_bottom_right(self, matrix: csc_matrix, pad_size: int) -> csc_matrix:
-        """
-        Pad the given sparse CSC matrix on the bottom and right with a specified value.
-
-        Parameters:
-            matrix (csc_matrix): The input sparse matrix.
-            pad_size (int): The number of rows and columns to add.
-            pad_value (int): The value to use for padding. Default is -1.
-
-        Returns:
-            csc_matrix: The padded sparse matrix.
-        """
+    def pad_matrix_bottom_right(self, matrix: csc_matrix, pad_size: int, pad_value: int = 0) -> csc_matrix:
         rows, cols = matrix.shape
-        new_rows = rows + pad_size
-        new_cols = cols + pad_size
 
-        # Create a new sparse matrix filled with the pad_value
-        # This is done by constructing a COOrdinate matrix with all the padding values
-        pad_matrix = csc_matrix((new_rows, new_cols))
+        # Create padding matrices
+        right_padding = csc_matrix((rows, pad_size))  # pad columns (right)
+        bottom_padding = csc_matrix((pad_size, cols + pad_size))  # pad rows (bottom)
 
-        # Insert original matrix into the top-left corner
-        pad_matrix[:rows, :cols] = matrix
+        # First pad right side
+        padded_top = hstack([matrix, right_padding])
 
-        return pad_matrix
+        # Then pad bottom
+        padded = vstack([padded_top, bottom_padding])
+
+        return padded
+
+    # def pad_matrix_bottom_right(self, matrix: csc_matrix, pad_size: int) -> csc_matrix:
+    #     """
+    #     Pad the given sparse CSC matrix on the bottom and right with a specified value.
+    #
+    #     Parameters:
+    #         matrix (csc_matrix): The input sparse matrix.
+    #         pad_size (int): The number of rows and columns to add.
+    #         pad_value (int): The value to use for padding. Default is -1.
+    #
+    #     Returns:
+    #         csc_matrix: The padded sparse matrix.
+    #     """
+    #     rows, cols = matrix.shape
+    #     new_rows = rows + pad_size
+    #     new_cols = cols + pad_size
+    #
+    #     # Create a new sparse matrix filled with the pad_value
+    #     # pad_matrix = csc_matrix((new_rows, new_cols))
+    #     pad_matrix = lil_matrix((new_rows, new_cols))
+    #
+    #     # Insert original matrix into the top-left corner
+    #     pad_matrix[:rows, :cols] = matrix
+    #
+    #     return pad_matrix.tocsc()
 
     def _save(self, chromosome: str, contact_matrix: csc_matrix, ground_truth: csc_matrix,
               patches: List[Tuple[int, int, int, int]], output_dir: pathlib.Path, metadata: dict = None):
