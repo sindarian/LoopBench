@@ -22,6 +22,7 @@ from util.utils import compute_pixel_distance
 
 LOGGER = Logger(name='plotting', level=logging.DEBUG).get_logger()
 
+# TODO: clean up plotting functions
 def load_histories(metric_dir):
     histories = []
     model_names = []
@@ -241,7 +242,8 @@ def plot_pixel_counts(data,
                       limit: int = None,
                       plot_neg: bool = False,
                       patch_size: int = 224,
-                      resolution: int = 10000):
+                      resolution: int = 10000,
+                      dataset=None):
     data_size = len(data if not limit else data[:limit])
     indices = np.arange(data_size)
     positives = [t[0] for t in data[:data_size]]
@@ -253,10 +255,10 @@ def plot_pixel_counts(data,
         plt.bar(indices, negatives, bottom=positives, color='red', alpha=0.5, label='Negatives')
 
     plt.xlabel('Patch')
-    plt.ylabel('Number of Pixels')
-    plt.title(f'Pixel Labels per Patch for {title}')
+    plt.ylabel('Number of Loops')
+    plt.title(f'{dataset} Loops per Patch ({title})')
     plt.text(1.05, 1.0,
-             f'Max pixel count: {patch_size * patch_size} pixels\nPatch Size: {patch_size}\nResolution: {resolution}',
+             f'Pixels per patch: {patch_size * patch_size} pixels\nPatch Size: {patch_size}\nResolution: {resolution}',
              transform=plt.gca().transAxes, va='top', ha='left', fontsize=10,
              bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="black"))
     plt.legend()
@@ -506,7 +508,7 @@ def plot_chromosome_labels(chromosomes, dataset_dir:str = 'dataset/hela_100', us
     plt.title('Positive Labels by Chromosome')
     plt.show()
 
-def plot_diagonal_distance_histogram(matrix, title: str):
+def plot_diagonal_distance_histogram(matrix, title: str, chrom, dataset_name):
     matrix = np.array(matrix, dtype=bool)
 
     # Get indices of all True values at once
@@ -520,29 +522,28 @@ def plot_diagonal_distance_histogram(matrix, title: str):
     y = [x[1] for x in c]
 
     # Create side-by-side plots
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    # fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    fig, (ax1) = plt.subplots(1, 1, figsize=(8, 6))
     fig.suptitle(title, fontsize=16)
 
     # Bar plot
     ax1.bar(x, y, alpha=0.7, color='lightcoral', edgecolor='black')
-    ax1.set_xlabel('Distance from Main Diagonal in Pixels')
-    ax1.set_ylabel('Number of True Values')
+    ax1.set_xlabel('Distance from Main Diagonal (bins)')
+    ax1.set_ylabel('# of Loops')
     ax1.grid(True, alpha=0.3)
 
     # Violin plot
-    ax2.violinplot([distances], positions=[0], widths=0.8)
-    ax2.set_xlabel('Distribution')
-    ax2.set_ylabel('Distance from Main Diagonal')
-    ax2.set_xticks([0])
-    ax2.set_xticklabels(['Distances'])
-    ax2.grid(True, alpha=0.3)
+    # ax2.violinplot([distances], positions=[0], widths=0.8)
+    # ax2.set_xlabel('Distribution')
+    # ax2.set_ylabel('Distance from Main Diagonal')
+    # ax2.set_xticks([0])
+    # ax2.set_xticklabels(['Distances'])
+    # ax2.grid(True, alpha=0.3)
 
     plt.tight_layout()
     plt.show()
 
-    fname = title.replace(' ', '_')
-    fname = fname.replace(':', '_')
-    fig.savefig(os.path.join(OUTPUT_DIR, PLOT_DIR, 'distance_accuracy_investigation', 'chrom_pos_distances', f'{fname}.png'))
+    fig.savefig(os.path.join(OUTPUT_DIR, PLOT_DIR, 'distance_accuracy_investigation', 'chrom_pos_distances', f'{dataset_name}_{chrom}.png'))
 
 def plot_heatmap(matrix, title="Heatmap", cmap='hot', figsize=(8, 6)):
     """
@@ -560,9 +561,24 @@ def plot_heatmap(matrix, title="Heatmap", cmap='hot', figsize=(8, 6)):
     plt.title(title)
     plt.show()
 
-def plot_raw_crhom(contacts, title: str = 'Raw Chromosome Interactions'):
+# def plot_raw_crhom(contacts, title: str = 'Distribution of Contact Values'):
+#     plt.hist(contacts, edgecolor="black", log=True)
+#     plt.xlabel("Contact Value")
+#     plt.ylabel("Frequency (log scale)")
+#     plt.title(title)
+#     plt.show()
+
+
+def plot_raw_crhom(contacts, title, max_val=None, min_val=None, mean_val=None):
     plt.hist(contacts, edgecolor="black", log=True)
-    plt.xlabel("Contact Value")
+    plt.xlabel("Read Count")
     plt.ylabel("Frequency (log scale)")
-    plt.title("Distribution of Contact Values")
+    plt.title(title)
+
+    # Add statistics label in top right
+    stats_text = f'Max: {max_val}\nMin: {min_val}\nMean: {mean_val:.2f}'
+    plt.text(0.95, 0.95, stats_text, transform=plt.gca().transAxes,
+             verticalalignment='top', horizontalalignment='right',
+             bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+
     plt.show()

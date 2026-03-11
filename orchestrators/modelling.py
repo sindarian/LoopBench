@@ -150,13 +150,21 @@ def _visualize_data(generator: ChromosomeGenerator,
                     patch_size: int,
                     resolution: int,
                     limit: int = None,
-                    plot_neg: bool = False):
+                    plot_neg: bool = False,
+                    chroms=None,
+                    dataset=None):
     # compute distributions
     train_counts = count_pos_neg_distributions(generator, patch_size)
 
     # plot distributions
-    plot_pixel_counts(train_counts, generator.name, limit, plot_neg, patch_size, resolution)
+    # plot_pixel_counts(train_counts, generator.name, limit, plot_neg, patch_size, resolution)
+
+    if dataset == 'hela':
+        dataset = 'HeLa'
+    if dataset == 'gm12878':
+        dataset = 'GM'
+    plot_pixel_counts(train_counts, f'Chrom-{chroms[0]}', limit, plot_neg, patch_size, resolution, dataset)
 
     # plot the heatmap for the top 4 images
-    plot_top_positive_patches(train_counts, 4, patch_size, resolution, 'x')
-    plot_top_positive_patches(train_counts, 4, patch_size, resolution, 'y')
+    # plot_top_positive_patches(train_counts, 4, patch_size, resolution, 'x')
+    # plot_top_positive_patches(train_counts, 4, patch_size, resolution, 'y')

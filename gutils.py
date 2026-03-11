@@ -1,3 +1,4 @@
+import pickle
 import runpy
 import sys
 from collections import defaultdict
@@ -13,7 +14,7 @@ import mustace_orig
 from hickit.reader import get_chrom_sizes, get_headers
 from hickit.matrix import CisMatrix
 from model.custom_layers import ClipByValue
-from mustache import regulator, mustache_norm
+# from mustache import regulator, mustache_norm
 from util.constants import RESOLUTION
 from util.plotting.plotting import plot_raw_crhom
 
@@ -306,19 +307,22 @@ def get_label_for_continuous_subgraph(position_indicator, bedpe_list, continuous
 
     # Initialize an empty boolean label matrix.
     if optimized:
-        label = csc_matrix((subgraph_size, subgraph_size), dtype='int')
+        # label = csc_matrix((subgraph_size, subgraph_size), dtype='int')
+        label = np.zeros((subgraph_size, subgraph_size), dtype='bool')
     else:
         label = np.zeros((subgraph_size, subgraph_size), dtype='bool')
 
     # Set the corresponding pixels in the label matrix to True.
     if optimized:
-        label[edge_list_row, edge_list_col] = 1
+        # label[edge_list_row, edge_list_col] = 1
+        label[edge_list_row, edge_list_col] = True
     else:
         label[edge_list_row, edge_list_col] = True
 
     # Symmetrize the label matrix.
     if optimized:
-        label = label + label.transpose() - diags(label.diagonal())
+        # label = label + label.transpose() - diags(label.diagonal())
+        label = np.triu(label) + np.tril(label.T, 1)
     else:
         label = np.triu(label) + np.tril(label.T, 1)
 
@@ -429,10 +433,10 @@ def get_raw_graph(chrom_name, txt_dir, resolution, chrom_sizes_path, filter_by_n
     return matrix
 
 def get_raw_graph_optimized(chrom_name, txt_dir, resolution, chrom_sizes_path, plot_chrom=False, threshold=0.75,
-                            normalization='log2,clip'):
+                            normalization='log2,clip', is_test=False):
     # Create the interaction matrix
-    interactions, chrom_upper_bound = create_sparse_csc_interaction_matrix(chrom_name, txt_dir, chrom_sizes_path, resolution,
-                                                        plot_chrom, threshold, normalization)
+    interactions, chrom_upper_bound, mean, std = create_sparse_csc_interaction_matrix(chrom_name, txt_dir, chrom_sizes_path, resolution,
+                                                        plot_chrom, threshold, normalization, is_test)
 
     # Get the genomic headers (coordinate information) for this chromosome.
     headers = get_headers([chrom_name], get_chrom_sizes(chrom_sizes_path), resolution)
@@ -440,7 +444,7 @@ def get_raw_graph_optimized(chrom_name, txt_dir, resolution, chrom_sizes_path, p
     # Create a CisMatrix object, which bundles the matrix data with its headers.
     matrix = CisMatrix(headers[headers['chrom'] == chrom_name], interactions, resolution)
 
-    return matrix, chrom_upper_bound
+    return matrix, chrom_upper_bound, mean, std
 
 
 def initialise_mat(chr_index, resolution, chrom_size_path):
@@ -505,16 +509,17 @@ def create_interaction_matrix(chr_index, txt_dir, chrom_size_path, resolution=RE
 
     mat = np.triu(mat) + np.tril(mat.T, 1)
 
+    print(f"ORIGINAL chrom-{chr_index}: ", mat.shape)
+
     return mat
 
 def create_sparse_csc_interaction_matrix(chr_index, txt_dir, chrom_size_path, resolution=RESOLUTION, plot_chrom=False,
-                                         threshold=0.75, normalization='log2,clip'):
+                                         threshold=0.75, normalization='log2,clip', use_train_norm=False):
     # Read the sparse data from the text file
     txt_data = read_contact_txt_data(txt_dir, chr_index)
     # drop any NaNs from the normalized Hi-C file
     txt_data = txt_data.dropna()
-    # collapse using sum
-    # txt_data = txt_data.groupby(['rows', 'cols'], as_index=False)['reads'].sum()
+    # txt_data = txt_data.df.fillna(0)
     # convert the returned interaction dataframe to a numpy object
     # interaction matrix rows = 0, interaction matrix cols = 1, interaction matrix values = 2
     contact_data = txt_data.values
@@ -525,71 +530,67 @@ def create_sparse_csc_interaction_matrix(chr_index, txt_dir, chrom_size_path, re
 
     contacts = contact_data[:, 2]
 
+    # plot_chrom=True
     if plot_chrom:
+        chrom_max = round(max(contact_data[:, 2]), 3)
+        chrom_min = round(min(contact_data[:, 2]), 3)
+        chrom_mean = round(np.mean(contact_data[:, 2]), 3)
         print(f'Chromosome {chr_index}:\n'
-              f'max = {max(contact_data[:, 2])}\n'
-              f'min = {min(contact_data[:, 2])}\n'
-              f'mean = {np.mean(contact_data[:, 2])}\n')
-        plot_raw_crhom(contacts)
+              f'max = {chrom_max}\n'
+              f'min = {chrom_min}\n'
+              f'mean = {chrom_mean}\n')
+        plot_raw_crhom(contacts, title=f'Distribution of Raw Chromosomal Contact Values (Chrom-{chr_index})',
+                       max_val=chrom_max, min_val=chrom_min, mean_val=chrom_mean)
 
     upper_bound = np.quantile(contacts, threshold)
 
     # init an empty sparse matrix and populate it with the normalized values
-    sparse_mat = initialise_sparse_csc_mat(chr_index, resolution, chrom_size_path)
+    # sparse_mat = initialise_sparse_csc_mat(chr_index, resolution, chrom_size_path)
+    sparse_mat = initialise_mat(chr_index, resolution, chrom_size_path)
     used_mustache = False
+    mean, std = None, None
 
-    norms = normalization.split(',')
-    for norm in norms:
-        if norm == 'log2':
-            contacts = np.log2(contacts + 1)
-        elif norm == 'log':
-            contacts = np.log(contacts + 1)
-        elif norm == 'clip':
-            contacts = ClipByValue(upper_bound)(contacts)
-        elif norm == 'divide':
-            contacts = contacts / upper_bound
-        elif norm == 'zscore':
-            contacts = (contacts - np.mean(contacts)) / np.std(contacts) #TODO: store mean/std dev in pkl, would including these as input to network improve perf?
-        elif norm == 'mustache':
-            used_mustache = True
-            chrom_contacts = csc_matrix(sparse_mat, copy=True)
-            chrom_contacts[rows, cols] = contacts
-            contacts = mustache_norm(chrom_contacts, res=resolution, pt=0.01, distance_filter=2000000, num_processes=5)
-
-            ### using orig
-            argv = [
-                "-f", "./data/hela_s3.hic",
-                "-r", "10kb",
-                "-pt", "0.01",
-                "-p", "1",
-                "-d", "2000000",
-                "-ch", f"{chr_index}",
-            ]
-            # contacts = mustace_orig.main(argv)
-        #     if argv is None:
-        #         argv = []
-        #     old_argv = sys.argv
-        #     try:
-        #         # Run and capture module globals to retrieve full_chrom
-        #         sys.argv = ["mustace_orig"] + list(argv)
-        #         mod_globals = runpy.run_module("mustace_orig", run_name="__main__")
-        #         full_chrom = mod_globals.get("full_chrom")
-        #     finally:
-        #         sys.argv = old_argv
-        #
-        #     if full_chrom is None:
-        #         raise RuntimeError("mustache run did not produce 'full_chrom' in module globals")
-        # else:
-        #     raise ValueError('Normalization method not recognized')
+    if normalization is not None:
+        norms = normalization.split(',')
+        for norm in norms:
+            if norm == 'log2':
+                contacts = np.log2(contacts + 1)
+            elif norm == 'log':
+                contacts = np.log(contacts + 1)
+            elif norm == 'clip':
+                contacts = ClipByValue(upper_bound)(contacts)
+            elif norm == 'divide':
+                contacts = contacts / upper_bound
+            elif norm == 'zscore':
+                mean = np.mean(contacts)
+                std = np.std(contacts)
+                contacts = (contacts - mean) / std
+            elif norm == 'mustache':
+                used_mustache = True
+                chrom_contacts = csc_matrix(sparse_mat, copy=True)
+                chrom_contacts[rows, cols] = contacts
+                contacts = mustache_norm(chrom_contacts, res=resolution, pt=0.01, distance_filter=2000000, num_processes=5)
+    else:
+        norm_prams = load_normalization_params()
+        contacts = np.log(contacts + 1)
+        mean = norm_prams[chr_index]['mean']
+        std = norm_prams[chr_index]['std']
+        contacts = (contacts - mean) / std
 
     if not used_mustache:
         sparse_mat[rows, cols] = contacts
         # Symmetrize the matrix by adding its transpose to itself.
-        sparse_mat = sparse_mat + sparse_mat.transpose() - diags(sparse_mat.diagonal())
+        sparse_mat = np.triu(sparse_mat) + np.tril(sparse_mat.T, 1)
     else:
         sparse_mat = csc_matrix(contacts)
 
-    return sparse_mat, upper_bound
+    sparse_mat = sparse_mat.astype(np.float32)
+    return sparse_mat, upper_bound, mean, std
+
+def load_normalization_params(filepath='dataset/hela_100/dataset_metadata.pkl'):
+    with open(filepath, 'rb') as f:
+        metadata = pickle.load(f)
+    return metadata
 
 def hic_to_intra_txt(juicer_path, file_path, out_dir, chrom, norm='KR', resolution=10000, hic_type='oe'):
     """

@@ -35,7 +35,7 @@ class ChromosomeProcessorEvaluator(ChromosomeProcessor):
                          patch_size=PATCH_SIZE,
                          resolution=RESOLUTION)
 
-    def _save_to_hdf5_zazrr(self, chromosome: str, matrix: np.ndarray) -> Tuple[List[str], List[str]]:
+    def _save_to_hdf5_zazrr(self, chromosome: str, matrix) -> Tuple[List[str], List[str]]:
         """
         Save the given matrix to both HDF5 and Zarr formats with various compression settings.
 
@@ -56,7 +56,7 @@ class ChromosomeProcessorEvaluator(ChromosomeProcessor):
 
         return hdf5_paths, zarr_paths
 
-    def _save_hdf5_datasets(self, chromosome: str, matrix: np.ndarray) -> List[str]:
+    def _save_hdf5_datasets(self, chromosome: str, matrix) -> List[str]:
         """
         Save a matrix to HDF5 files using different compression algorithms.
 
@@ -93,7 +93,7 @@ class ChromosomeProcessorEvaluator(ChromosomeProcessor):
 
         return paths
 
-    def _save_zarr_datasets(self, chromosome: str, matrix: np.ndarray) -> List[str]:
+    def _save_zarr_datasets(self, chromosome: str, matrix) -> List[str]:
         """
         Save a matrix to Zarr format with various compression options.
 
@@ -234,7 +234,7 @@ class ChromosomeProcessorEvaluator(ChromosomeProcessor):
         return time.time() - zarr_start
 
     @override
-    def _save_to_hdf5(self, chromosome: str, contact_matrix: np.ndarray, patches: List[tuple]) -> List[str]:
+    def _save_to_hdf5(self, chromosome: str, contact_matrix, patches: List[tuple]) -> List[str]:
         """
         Saves the contact matrix and patch references into an HDF5 file with specified compression.
 
@@ -305,7 +305,7 @@ class ChromosomeProcessorEvaluator(ChromosomeProcessor):
         return region_refs
 
     @override
-    def pad_matrix_bottom_right(self, matrix: np.ndarray, pad_size: int, pad_value: float = 0.0) -> np.ndarray:
+    def pad_matrix_bottom_right(self, matrix, pad_size: int, pad_value: float = 0.0):
         """
         Pad the given sparse CSC matrix on the bottom and right with a specified value.
 
@@ -351,7 +351,7 @@ class ChromosomeProcessorEvaluator(ChromosomeProcessor):
 
         return time_reg_ref_s, size_reg_ref_b, patch_data_ref
 
-    def _time_patch_indexing_read(self, contacts_ds: h5py.Dataset, patches_indices: np.ndarray) -> tuple:
+    def _time_patch_indexing_read(self, contacts_ds: h5py.Dataset, patches_indices) -> tuple:
         """
         Times the patch indexing read operation and calculates the size of the stored indices (patches)
 

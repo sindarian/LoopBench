@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # List of methods to test
+# if any of these fail, run them separately
 methods=("numpy" "csr" "csc" "lil" "hdf5")
 #methods=("numpy")
 

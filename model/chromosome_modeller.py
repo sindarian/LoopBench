@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import List
 
 import numpy as np
@@ -37,8 +38,12 @@ class ChromosomeModeller:
             LOGGER.info(f'Training model for {self.model.model_name}')
             self.model.build()
 
-        # train teh model with the generators
+        # train the model with the generators
+        start = time.time()
         self.model.train(self.train_generator, self.val_generator, self.epochs)
+        end = time.time()
+        train_time = end - start
+
 
         # the history object is saved as a file and on the model object itself. For
         # evaluation of different models, extract the final train and val metrics from it
@@ -52,6 +57,7 @@ class ChromosomeModeller:
         LOGGER.info(f'Train: {train_metrics}')
         LOGGER.info(f'Validation: {val_metrics}')
         LOGGER.info(f'Test: {test_metrics}')
+        LOGGER.info(f'Time taken to train: {train_time} seconds; {train_time / 60} minutes')
         LOGGER.info(f'#########################################################')
 
         # reset the keras session
@@ -82,6 +88,7 @@ class ChromosomeModeller:
         # run the model num_runs times
         for i in range(num_runs):
             LOGGER.info(f'\nFitting model: {format(self.model.model_name)} - repeat {i + 1}')
+
             train_metrics, val_metrics, test_metrics = self.run(train_original)
 
             # Store all metrics for this run
@@ -102,9 +109,9 @@ class ChromosomeModeller:
         for metric in self.model.history.keys():
             if 'loss' not in metric:
                 if 'val_' in metric:
-                    val_metrics[metric] = self.model.history[metric][-1]
+                    val_metrics[metric] = self.model.history[metric][self.model.best_epoch]
                 else:
-                    train_metrics[metric] = self.model.history[metric][-1]
+                    train_metrics[metric] = self.model.history[metric][self.model.best_epoch]
 
         return train_metrics, val_metrics
 
