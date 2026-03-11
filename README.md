@@ -1,42 +1,38 @@
 # GILoop
-GILoop is a deep learning model for detecting CTCF-mediated loops on Hi-C contact maps. 
+
+GILoop is a deep learning model for detecting CTCF-mediated loops in Hi-C contact maps.
 
 ![Model architecture](./figure/architecture.png)
 
+> **New:** GILoop now supports `.cool` input.
 
+---
 
-**New:** *GILoop now supports `.cool` input*
-
-
-
-#### Installation:
-
-```
+## Installation
+```bash
 conda create -n GIL python=3.8
 conda activate GIL
 pip install -r requirements.txt
 ```
 
-After running the code segment above, please download `models` and `data` from [GILoop_assets](https://portland-my.sharepoint.com/:f:/g/personal/fuzhowang2-c_my_cityu_edu_hk/EpsC_y58ARNInLGjwy4yc44BNs2fKzCXNFVLUxrsrtHO2A?e=83KzE4) and **replace the ones in the local directory**. 
+After running the above, download `models` and `data` from [GILoop_assets](https://portland-my.sharepoint.com/:f:/g/personal/fuzhowang2-c_my_cityu_edu_hk/EpsC_y58ARNInLGjwy4yc44BNs2fKzCXNFVLUxrsrtHO2A?e=83KzE4) and **replace the corresponding files in your local directory**.
 
+---
 
+## Usage
 
-#### Usage:
+GILoop supports two input formats: `.cool` files or Juicer dump text files.
 
-You can either use `.cool` files as input, or use the output format of Juicer dump as input.
-
-**Cooler input:**
-
-```
+### Cooler Input
+```bash
 python demo.py
 ```
 
-API usage is self-documented in [demo.py](./demo.py). This script is the full pipeline including data pre-processing (sequencing depth alignment, normalization, and expected vector calculation, etc.), and GILoop sampling and training. The preprocessing overhead could be heavy and could lead to a large running time. 
+API usage is self-documented in [demo.py](./demo.py). This script runs the full pipeline including data preprocessing (sequencing depth alignment, normalization, expected vector calculation, etc.), GILoop patch sampling, and model training. Note that preprocessing can be computationally intensive and may result in longer runtimes.
 
-**Juicer dump text file as input:**
-
-```
+### Juicer Dump Text File Input
+```bash
 python demo_from_processed.py
 ```
 
-In this case, please make sure the text files are KR-normalized O/E matrices, and the source and the target are of similar number of reads. The script only carries out GILoop patching and training. No preprocessing is applied to the data. 
+Input files must be KR-normalized O/E matrices, and the source and target datasets should have a similar number of reads. This script skips preprocessing and runs only GILoop patch sampling and model training.
